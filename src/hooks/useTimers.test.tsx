@@ -29,19 +29,27 @@ describe('useTimers', () => {
     expect(result.current.timers[0].timer.status).toBe('running')
 
     expect(JSON.parse(localStorage.getItem(key('timers'))!)[0].title).toBe('Tea')
-    expect(JSON.parse(localStorage.getItem(key('usage'))!)['60000'].count).toBe(1)
   })
 
-  it('plays the alarm once when the timer hits zero', async () => {
+  it('plays the alarm once and removes the timer when auto-delete is on (default)', async () => {
     const { result } = renderHook(() => useTimers())
-    act(() => {})
     act(() => result.current.actions.start('Tea', 60_000))
 
     act(() => {
       vi.advanceTimersByTime(61_000)
     })
-    expect(result.current.timers[0].timer.status).toBe('finished')
+    expect(result.current.timers).toHaveLength(0)
     expect(playAlarm).toHaveBeenCalledTimes(1)
+  })
+
+  it('keeps finished timers when delete-when-finished is off', async () => {
+    const { result } = renderHook(() => useTimers())
+    act(() => result.current.actions.start('Tea', 60_000, { deleteWhenFinished: false }))
+
+    act(() => {
+      vi.advanceTimersByTime(61_000)
+    })
+    expect(result.current.timers[0].timer.status).toBe('finished')
     expect(result.current.timers[0].remaining).toBe(0)
   })
 
@@ -55,6 +63,7 @@ describe('useTimers', () => {
         endsAt: Date.now() - 5_000,
         status: 'running',
         createdAt: Date.now() - 65_000,
+        deleteWhenFinished: false,
       },
     ]))
 
@@ -62,6 +71,49 @@ describe('useTimers', () => {
     act(() => {})
     expect(result.current.timers[0].timer.status).toBe('finished')
     expect(playAlarm).not.toHaveBeenCalled()
+  })
+
+  it('rerun replaces a finished timer with a fresh running one', async () => {
+    const { result } = renderHook(() => useTimers())
+    act(() => result.current.actions.start('Tea', 60_000, { favorite: true, deleteWhenFinished: false }))
+    const id = result.current.timers[0].timer.id
+
+    act(() => {
+      vi.advanceTimersByTime(61_000)
+    })
+    expect(result.current.timers[0].timer.status).toBe('finished')
+
+    act(() => result.current.actions.rerun(id))
+    expect(result.current.timers).toHaveLength(1)
+    expect(result.current.timers[0].timer.id).not.toBe(id)
+    expect(result.current.timers[0].timer.status).toBe('running')
+    expect(result.current.timers[0].timer.favorite).toBe(true)
+    expect(result.current.timers[0].remaining).toBe(60_000)
+  })
+
+  it('registers started favourites once per title and duration', async () => {
+    const { result } = renderHook(() => useTimers())
+    act(() => result.current.actions.start('Coffee', 300_000, { favorite: true }))
+    act(() => result.current.actions.remove(result.current.timers[0].timer.id))
+    act(() => result.current.actions.start('Coffee', 300_000, { favorite: true }))
+    act(() => result.current.actions.start('Espresso', 600_000, { favorite: true }))
+    act(() => result.current.actions.start('Plain', 60_000))
+
+    expect(result.current.favorites).toEqual([
+      { title: 'Espresso', durationMs: 600_000 },
+      { title: 'Coffee', durationMs: 300_000 },
+    ])
+  })
+
+  it('rejects duplicate titles regardless of case, allows repeated empty titles', async () => {
+    const { result } = renderHook(() => useTimers())
+    act(() => result.current.actions.start('Tea', 60_000))
+    act(() => result.current.actions.start('  tea  ', 90_000))
+    act(() => result.current.actions.start('', 60_000))
+    act(() => result.current.actions.start('', 60_000))
+
+    expect(result.current.timers).toHaveLength(3)
+    expect(result.current.timers.some((t) => t.timer.durationMs === 90_000)).toBe(false)
   })
 
   it('pause freezes remaining and resume continues', async () => {
@@ -86,17 +138,5 @@ describe('useTimers', () => {
     act(() => vi.advanceTimersByTime(10_000))
     expect(result.current.timers[0].remaining).toBe(30_000)
   })
-
-  it('suggests the most started durations', async () => {
-    const { result } = renderHook(() => useTimers())
-    act(() => {})
-    act(() => result.current.actions.start('A', 60_000))
-    act(() => result.current.actions.start('A2', 60_000))
-    act(() => result.current.actions.start('B', 120_000))
-
-    expect(result.current.suggestions.map((s) => s.durationMs)).toEqual([
-      60_000, 120_000,
-    ])
-    expect(result.current.suggestions[0].title).toBe('A')
-  })
 })
+

@@ -1,3 +1,4 @@
+import type { Timer } from './timers'
 import {
   createTimer,
   digitsToMs,
@@ -6,10 +7,9 @@ import {
   formatDigits,
   normalize,
   pause,
-  recordUsage,
+  sortTimers,
   remainingMs,
   resume,
-  topSuggestions,
 } from './timers'
 import { describe, expect, it } from 'vitest'
 
@@ -43,13 +43,15 @@ describe('timer lifecycle', () => {
     expect(remainingMs(reopened, NOW + 90_000)).toBe(0)
   })
 
-  it('duplicate restarts a fresh copy with the same title and duration', () => {
-    const t = pause(createTimer('Tea', 60_000, NOW), NOW + 10_000)
+  it('duplicate restarts a fresh copy with the same settings', () => {
+    const t = pause(createTimer('Tea', 60_000, NOW, { favorite: true, deleteWhenFinished: false }), NOW + 10_000)
     const copy = duplicate(t, NOW)
     expect(copy.id).not.toBe(t.id)
     expect(copy.title).toBe('Tea')
     expect(copy.durationMs).toBe(60_000)
     expect(copy.status).toBe('running')
+    expect(copy.favorite).toBe(true)
+    expect(copy.deleteWhenFinished).toBe(false)
     expect(remainingMs(copy, NOW)).toBe(60_000)
   })
 
@@ -80,22 +82,48 @@ describe('formatting', () => {
   })
 })
 
-describe('suggestions', () => {
-  it('ranks by count and keeps the first title given to a duration', () => {
-    let usage = recordUsage({}, 'Coffee', 300_000)
-    usage = recordUsage(usage, 'Whatever', 300_000)
-    usage = recordUsage(usage, 'Workout', 1_500_000)
+describe('sortTimers', () => {
+  const entry = (t: Timer) => ({ timer: t, remaining: 0 })
 
-    const top = topSuggestions(usage, 2)
-    expect(top[0]).toEqual({ durationMs: 300_000, title: 'Coffee', count: 2 })
-    expect(top[1].title).toBe('Workout')
+  it('sorts by title a-z with Untitled fallback', () => {
+    const list = [
+      entry(createTimer('Zeta', 60_000, NOW)),
+      entry(createTimer('', 60_000, NOW)),
+      entry(createTimer('alpha', 60_000, NOW)),
+    ]
+    expect(sortTimers(list, 'title-az').map((e) => e.timer.title || 'Untitled')).toEqual([
+      'alpha',
+      'Untitled',
+      'Zeta',
+    ])
   })
 
-  it('caps suggestions at the limit and drops zero durations', () => {
-    let usage = recordUsage({}, '', 0)
-    usage = recordUsage(usage, 'A', 1_000)
-    usage = recordUsage(usage, 'B', 2_000)
-    usage = recordUsage(usage, 'C', 3_000)
-    expect(topSuggestions(usage, 2)).toHaveLength(2)
+  it('sorts by created date asc and desc (desc is the default key)', () => {
+    const list = [
+      entry(createTimer('A', 60_000, NOW)),
+      entry(createTimer('B', 60_000, NOW + 10)),
+      entry(createTimer('C', 60_000, NOW + 20)),
+    ]
+    expect(sortTimers(list, 'created-asc').map((e) => e.timer.title)).toEqual(['A', 'B', 'C'])
+    expect(sortTimers(list, 'created-desc').map((e) => e.timer.title)).toEqual(['C', 'B', 'A'])
+  })
+
+  it('sorts by duration longest and shortest first', () => {
+    const list = [
+      entry(createTimer('A', 30_000, NOW)),
+      entry(createTimer('B', 90_000, NOW)),
+      entry(createTimer('C', 60_000, NOW)),
+    ]
+    expect(sortTimers(list, 'duration-desc').map((e) => e.timer.title)).toEqual(['B', 'C', 'A'])
+    expect(sortTimers(list, 'duration-asc').map((e) => e.timer.title)).toEqual(['A', 'C', 'B'])
+  })
+
+  it('sorts favourites first', () => {
+    const list = [
+      entry(createTimer('A', 60_000, NOW)),
+      entry(createTimer('B', 60_000, NOW, { favorite: true })),
+      entry(createTimer('C', 60_000, NOW)),
+    ]
+    expect(sortTimers(list, 'favorite').map((e) => e.timer.title)).toEqual(['B', 'A', 'C'])
   })
 })

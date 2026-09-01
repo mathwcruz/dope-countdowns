@@ -1,43 +1,48 @@
 import { playAlarm, type SoundPreset } from '@/lib/sound'
 import {
+  addFavorite,
+  autoDelete,
   createTimer,
   duplicate,
   normalize,
   pause,
-  recordUsage,
   remainingMs,
   resume,
-  type Suggestion,
+  type FavoriteDef,
   type Timer,
-  type Usage,
-  topSuggestions,
+  type TimerOptions,
 } from '@/lib/timers'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import useLocalStorageCjs from 'use-local-storage'
 
-const useLocalStorage =
+export const useLocalStorage =
   (useLocalStorageCjs as unknown as { default?: typeof useLocalStorageCjs })
     .default ?? useLocalStorageCjs
 
 export interface Settings {
   sound: SoundPreset
   repeats: number
+  volume: number
 }
 
-const DEFAULT_SETTINGS: Settings = { sound: 'chime', repeats: 3 }
+const DEFAULT_SETTINGS: Settings = { sound: 'chime', repeats: 3, volume: 0.8 }
 
 const KEYS = {
   timers: 'dope-countdowns:timers',
-  usage: 'dope-countdowns:usage',
   settings: 'dope-countdowns:settings',
+  favourites: 'dope-countdowns:favourites',
 }
 
 export function useTimers() {
   const [timers, setTimers] = useLocalStorage<Timer[]>(KEYS.timers, [])
-  const [usage, setUsage] = useLocalStorage<Usage>(KEYS.usage, {})
-  const [settings, setSettings] = useLocalStorage<Settings>(
+  const [favorites, setFavorites] = useLocalStorage<FavoriteDef[]>(KEYS.favourites, [])
+  const [storedSettings, setSettings] = useLocalStorage<Settings>(
     KEYS.settings,
     DEFAULT_SETTINGS,
+  )
+  const settings = useMemo(
+    () => ({ ...DEFAULT_SETTINGS, ...storedSettings }),
+    [storedSettings],
   )
   const [now, setNow] = useState(() => Date.now())
 
@@ -68,11 +73,22 @@ export function useTimers() {
     if (!mounted.current) {
       mounted.current = true
       for (const v of finished) announced.current.add(v.timer.id)
+      const stale = finished.filter((v) => autoDelete(v.timer))
+      if (stale.length > 0) {
+        setTimers((prev) => prev?.filter((t) => !stale.some((s) => s.timer.id === t.id)))
+      }
       return
     }
     const fresh = finished.filter((v) => !announced.current.has(v.timer.id))
     for (const v of fresh) announced.current.add(v.timer.id)
-    if (fresh.length > 0) playAlarm(settings.sound, settings.repeats)
+    if (fresh.length > 0) {
+      playAlarm(settings.sound, settings.repeats, settings.volume)
+      const doomed = fresh.filter((v) => autoDelete(v.timer))
+      if (doomed.length > 0) {
+        doomed.forEach((v) => announced.current.delete(v.timer.id))
+        setTimers((prev) => prev?.filter((t) => !doomed.some((d) => d.timer.id === t.id)))
+      }
+    }
   }, [view, settings.sound, settings.repeats])
 
   const update = useCallback(
@@ -83,10 +99,12 @@ export function useTimers() {
 
   const actions = useMemo(
     () => ({
-      start: (title: string, durationMs: number) => {
+      start: (title: string, durationMs: number, opts?: TimerOptions) => {
         if (durationMs <= 0) return
-        setTimers((prev) => [...(prev ?? []), createTimer(title, durationMs)])
-        setUsage((prev) => recordUsage(prev ?? {}, title, durationMs))
+        const name = title.trim().toLowerCase()
+        if (name && timers.some((t) => t.title.trim().toLowerCase() === name)) return
+        setTimers((prev) => [...(prev ?? []), createTimer(title, durationMs, Date.now(), opts)])
+        if (opts?.favorite) setFavorites((prev) => addFavorite(prev ?? [], { title: title.trim(), durationMs }))
       },
       pause: (id: string) => update(id, (t) => pause(t, Date.now())),
       resume: (id: string) => update(id, (t) => resume(t, Date.now())),
@@ -94,19 +112,21 @@ export function useTimers() {
         announced.current.delete(id)
         setTimers((prev) => prev?.filter((t) => t.id !== id))
       },
-      duplicate: (id: string) => {
+      rerun: (id: string) => {
         const source = timers.find((t) => t.id === id)
         if (!source) return
-        setTimers((prev) => [...(prev ?? []), duplicate(source, Date.now())])
-        setUsage((prev) => recordUsage(prev ?? {}, source.title, source.durationMs))
+        const copy = duplicate(source, Date.now())
+        announced.current.delete(id)
+        setTimers((prev) => [
+          ...(prev ?? []).filter((t) => t.id !== id),
+          copy,
+        ])
       },
     }),
-    [timers, update, setTimers, setUsage],
+    [timers, update, setTimers],
   )
 
-  const suggestions: Suggestion[] = useMemo(() => topSuggestions(usage), [usage])
-
-  return { timers: view, actions, suggestions, settings, setSettings }
+  return { timers: view, actions, favorites, settings, setSettings }
 }
 
 export type TimersApi = ReturnType<typeof useTimers>

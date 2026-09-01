@@ -1,5 +1,7 @@
 export type TimerStatus = 'running' | 'paused' | 'finished'
 
+export const MAX_TIMER_MS = 24 * 60 * 60 * 1000
+
 export interface Timer {
   id: string
   title: string
@@ -8,12 +10,20 @@ export interface Timer {
   endsAt: number | null
   status: TimerStatus
   createdAt: number
+  favorite?: boolean
+  deleteWhenFinished?: boolean
+}
+
+export interface TimerOptions {
+  favorite?: boolean
+  deleteWhenFinished?: boolean
 }
 
 export function createTimer(
   title: string,
   durationMs: number,
   now: number = Date.now(),
+  opts: TimerOptions = {},
 ): Timer {
   return {
     id: crypto.randomUUID(),
@@ -23,8 +33,12 @@ export function createTimer(
     endsAt: now + durationMs,
     status: 'running',
     createdAt: now,
+    favorite: opts.favorite ?? false,
+    deleteWhenFinished: opts.deleteWhenFinished ?? true,
   }
 }
+
+export const autoDelete = (t: Timer) => t.deleteWhenFinished ?? true
 
 export function remainingMs(timer: Timer, now: number): number {
   if (timer.status === 'running' && timer.endsAt !== null) {
@@ -63,7 +77,10 @@ export function normalize(timer: Timer, now: number): Timer {
 }
 
 export function duplicate(timer: Timer, now: number): Timer {
-  return createTimer(timer.title, timer.durationMs, now)
+  return createTimer(timer.title, timer.durationMs, now, {
+    favorite: timer.favorite,
+    deleteWhenFinished: timer.deleteWhenFinished,
+  })
 }
 export function formatClock(ms: number): string {
   const total = Math.floor(ms / 1000)
@@ -83,39 +100,55 @@ export function formatDigits(digits: string): string {
   return formatClock(digitsToMs(digits))
 }
 
-export interface UsageStat {
-  count: number
-  lastTitle: string
-}
-
-export type Usage = Record<string, UsageStat>
-
-export interface Suggestion {
-  durationMs: number
+export interface FavoriteDef {
   title: string
-  count: number
+  durationMs: number
 }
 
-export function recordUsage(usage: Usage, title: string, durationMs: number): Usage {
-  const key = String(durationMs)
-  const prev = usage[key] ?? { count: 0, lastTitle: '' }
-  return {
-    ...usage,
-    [key]: {
-      count: prev.count + 1,
-      lastTitle: prev.lastTitle || title.trim(),
-    },
+export function addFavorite(list: FavoriteDef[], def: FavoriteDef): FavoriteDef[] {
+  const key = (f: FavoriteDef) => `${f.title.trim()}\u0000${f.durationMs}`
+  return [def, ...list.filter((f) => key(f) !== key(def))]
+}
+
+export interface TimerEntry {
+  timer: Timer
+  remaining: number
+}
+
+export const SORTS = [
+  ['title-az', 'Title (A-Z)'],
+  ['created-asc', 'Created (oldest first)'],
+  ['created-desc', 'Created (newest first)'],
+  ['duration-desc', 'Duration (longest first)'],
+  ['duration-asc', 'Duration (shortest first)'],
+  ['favorite', 'Favourite'],
+] as const
+
+export type SortKey = (typeof SORTS)[number][0]
+export const DEFAULT_SORT: SortKey = 'created-desc'
+
+export function sortTimers(entries: TimerEntry[], key: SortKey): TimerEntry[] {
+  const list = [...entries]
+  switch (key) {
+    case 'title-az':
+      list.sort((a, b) =>
+        (a.timer.title || 'Untitled').localeCompare(b.timer.title || 'Untitled'),
+      )
+      break
+    case 'duration-desc':
+      list.sort((a, b) => b.timer.durationMs - a.timer.durationMs)
+      break
+    case 'duration-asc':
+      list.sort((a, b) => a.timer.durationMs - b.timer.durationMs)
+      break
+    case 'favorite':
+      list.sort((a, b) => Number(b.timer.favorite ?? false) - Number(a.timer.favorite ?? false))
+      break
+    case 'created-asc':
+      list.sort((a, b) => a.timer.createdAt - b.timer.createdAt)
+      break
+    default:
+      list.sort((a, b) => b.timer.createdAt - a.timer.createdAt)
   }
-}
-
-export function topSuggestions(usage: Usage, limit = 3): Suggestion[] {
-  return Object.entries(usage)
-    .map(([key, stat]) => ({
-      durationMs: Number(key),
-      title: stat.lastTitle,
-      count: stat.count,
-    }))
-    .filter((s) => s.durationMs > 0)
-    .sort((a, b) => b.count - a.count || a.durationMs - b.durationMs)
-    .slice(0, limit)
+  return list
 }

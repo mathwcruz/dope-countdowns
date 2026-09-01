@@ -37,8 +37,8 @@ describe('TimeInput mask', () => {
   it('appends digits Google-style and keeps only the last six', async () => {
     const { input, onDigitsChange } = setup()
     const user = userEvent.setup()
-    await user.type(input, '12345678')
-    expect(onDigitsChange).toHaveBeenLastCalledWith('345678')
+    await user.type(input, '1234567')
+    expect(onDigitsChange).toHaveBeenLastCalledWith('234567')
   })
 
   it('ignores non-digits', async () => {
@@ -46,6 +46,18 @@ describe('TimeInput mask', () => {
     const user = userEvent.setup()
     await user.type(input, '1a2b')
     expect(onDigitsChange).toHaveBeenLastCalledWith('12')
+  })
+
+  it('rejects input beyond 24:00:00', async () => {
+    const { input, onDigitsChange } = setup()
+    const user = userEvent.setup()
+    await user.type(input, '250000')
+    expect(onDigitsChange).toHaveBeenLastCalledWith('25000')
+  })
+
+  it('shows the required asterisk', () => {
+    render(<TimeInput digits="" onDigitsChange={() => {}} aria-label="Duration" />)
+    expect(screen.getByText('*')).toBeVisible()
   })
 
   it('renders formatted value from digits', () => {

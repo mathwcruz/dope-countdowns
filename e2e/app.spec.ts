@@ -24,7 +24,7 @@ test('starts a timer and shows it counting down', async ({ page }) => {
 test('tab title tracks the soonest timer', async ({ page }) => {
   await startTimer(page, 'A', '300')
   await startTimer(page, 'B', '500')
-  await expect(page).toHaveTitle(/00:03:0\d — Dope Countdowns/)
+  await expect(page).toHaveTitle(/A · 00:03:0\d/)
 })
 
 test('pause freezes, resume continues', async ({ page }) => {
@@ -39,10 +39,14 @@ test('pause freezes, resume continues', async ({ page }) => {
   await expect(card.getByRole('button', { name: 'Pause' })).toBeVisible()
 })
 
-test('duplicate creates an independent running copy', async ({ page }) => {
-  await startTimer(page, 'Tea', '500')
-  await page.getByRole('button', { name: 'Duplicate timer' }).click()
-  await expect(page.getByRole('listitem')).toHaveCount(2)
+test('run again replaces the finished timer with a fresh running one', async ({ page }) => {
+  await page.getByLabel('Delete when finished').click()
+  await startTimer(page, 'Tea', '2')
+  const card = page.getByRole('listitem', { name: /Tea/ })
+  await expect(card.getByText("Time's up")).toBeVisible({ timeout: 10_000 })
+  await card.getByRole('button', { name: 'Run again' }).click()
+  await expect(page.getByRole('listitem')).toHaveCount(1)
+  await expect(card.getByRole('button', { name: 'Pause' })).toBeVisible()
 })
 
 test('delete removes the timer', async ({ page }) => {
@@ -51,18 +55,17 @@ test('delete removes the timer', async ({ page }) => {
   await expect(page.getByRole('listitem')).toHaveCount(0)
 })
 
-test('timer persists and finishes across a reload', async ({ page }) => {
+test('auto-delete timer finishes and is removed across a reload', async ({ page }) => {
   await startTimer(page, 'Tea', '2')
   await page.reload()
   const card = page.getByRole('listitem', { name: /Tea/ })
   await expect(card).toBeVisible()
-  await expect(card.getByText("Time's up")).toBeVisible({ timeout: 10_000 })
-  await expect(card.getByText('00:00:00')).toBeVisible()
+  await expect(page.getByRole('listitem')).toHaveCount(0, { timeout: 10_000 })
+  await expect(page.getByText('No timers yet')).toBeVisible()
 })
 
-test('suggests frequently started durations as quick start chips', async ({ page }) => {
-  await startTimer(page, 'Coffee', '500')
-  await page.getByRole('button', { name: 'Delete timer' }).click()
+test('favourite timers section starts a new countdown', async ({ page }) => {
+  await page.getByRole('button', { name: 'Mark as favourite' }).click()
   await startTimer(page, 'Coffee', '500')
   await page.getByRole('button', { name: 'Delete timer' }).click()
 
@@ -70,6 +73,14 @@ test('suggests frequently started durations as quick start chips', async ({ page
   await expect(chip).toBeVisible()
   await chip.click()
   await expect(page.getByRole('listitem', { name: /Coffee/ })).toBeVisible()
+})
+
+test('blocks creating a second timer with the same title', async ({ page }) => {
+  await startTimer(page, 'Tea', '500')
+  await page.getByLabel('Timer title').fill('tea')
+  await page.getByLabel('Duration').pressSequentially('2', { delay: 30 })
+  await expect(page.getByRole('alert')).toHaveText('A timer with this title already exists')
+  await expect(page.getByRole('button', { name: 'Start', exact: true })).toBeDisabled()
 })
 
 test('sound settings dialog opens and persists a choice', async ({ page }) => {

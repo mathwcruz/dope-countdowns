@@ -55,27 +55,28 @@ function getCtx(): AudioContext | null {
   }
 }
 
-function playNote(audio: AudioContext, note: Note, offset: number) {
+function playNote(audio: AudioContext, note: Note, offset: number, volume: number) {
   const osc = audio.createOscillator()
   const gain = audio.createGain()
   const start = audio.currentTime + offset + note.at
   osc.type = note.type
   osc.frequency.value = note.freq
   gain.gain.setValueAtTime(0, start)
-  gain.gain.linearRampToValueAtTime(note.gain, start + 0.01)
+  gain.gain.linearRampToValueAtTime(note.gain * volume, start + 0.01)
   gain.gain.exponentialRampToValueAtTime(0.001, start + note.dur)
   osc.connect(gain).connect(audio.destination)
   osc.start(start)
   osc.stop(start + note.dur + 0.05)
 }
 
-export function playAlarm(preset: SoundPreset, repeats: number) {
+export function playAlarm(preset: SoundPreset, repeats: number, volume = 1) {
   const audio = getCtx()
   if (!audio) return
   const pattern = PATTERNS[preset]
+  const vol = Math.min(1, Math.max(0, volume))
   for (let r = 0; r < Math.max(1, repeats); r++) {
     for (const note of pattern.notes) {
-      playNote(audio, note, r * pattern.length)
+      playNote(audio, note, r * pattern.length, vol)
     }
   }
 }

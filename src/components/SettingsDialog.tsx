@@ -81,7 +81,24 @@ export function SettingsDialog({ settings, onSettingsChange }: SettingsDialogPro
             />
           </div>
 
-          <Button variant="outline" onClick={() => playAlarm(settings.sound, settings.repeats)}>
+          <div className="grid gap-3">
+            <div className="flex items-center justify-between">
+              <Label htmlFor="sound-volume">Volume</Label>
+              <span className="text-sm tabular-nums text-muted-foreground">
+                {Math.round(settings.volume * 100)}%
+              </span>
+            </div>
+            <Slider
+              id="sound-volume"
+              min={0}
+              max={100}
+              step={5}
+              value={[Math.round(settings.volume * 100)]}
+              onValueChange={([v]) => set({ volume: v / 100 })}
+            />
+          </div>
+
+          <Button variant="outline" onClick={() => playAlarm(settings.sound, settings.repeats, settings.volume)}>
             <Volume2 data-icon="inline-start" aria-hidden />
             Test sound
           </Button>

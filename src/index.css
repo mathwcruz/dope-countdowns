@@ -5,6 +5,11 @@
 
 @custom-variant dark (&:is(.dark *));
 
+@utility container {
+  margin-inline: auto;
+  padding-inline: 1rem;
+}
+
 @theme {
   --breakpoint-sm: 640px;
   --breakpoint-md: 768px;

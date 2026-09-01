@@ -1,24 +1,91 @@
 import { NewTimerForm } from '@/components/NewTimerForm'
 import { SettingsDialog } from '@/components/SettingsDialog'
 import { TimerCard } from '@/components/TimerCard'
-import { useTimers } from '@/hooks/useTimers'
-import { formatClock } from '@/lib/timers'
-import { Plus } from 'lucide-react'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { useLocalStorage, useTimers, type TimersApi } from '@/hooks/useTimers'
+import { formatClock, sortTimers, DEFAULT_SORT, SORTS, type SortKey } from '@/lib/timers'
+import { AnimatePresence } from 'motion/react'
 import { useEffect } from 'react'
 
 const BASE_TITLE = 'Dope Countdowns'
 
-export default function App() {
-  const { timers, actions, suggestions, settings, setSettings } = useTimers()
+function SortSelect({ label, value, onChange }: { label: string; value: SortKey; onChange: (key: SortKey) => void }) {
+  return (
+    <Select value={value} onValueChange={(v) => onChange(v as SortKey)}>
+      <SelectTrigger aria-label={label} className="h-8 w-60 text-xs">
+        <SelectValue />
+      </SelectTrigger>
+      <SelectContent>
+        {SORTS.map(([key, text]) => (
+          <SelectItem key={key} value={key} className="text-xs">
+            {text}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  )
+}
 
+function TimerSection({
+  title,
+  entries,
+  sort,
+  onSortChange,
+  api,
+}: {
+  title: string
+  entries: TimersApi['timers']
+  sort: SortKey
+  onSortChange: (key: SortKey) => void
+  api: TimersApi
+}) {
+  if (entries.length === 0) return null
+  sort = SORTS.some(([k]) => k === sort) ? sort : DEFAULT_SORT
+  return (
+    <section className="flex flex-col gap-3" aria-label={title}>
+      <div className="flex flex-col items-start gap-2 sm:flex-row sm:items-center sm:justify-between">
+        <h2 className="text-lg font-semibold">
+          {title} <span className="text-sm font-normal text-muted-foreground">({entries.length})</span>
+        </h2>
+        <SortSelect label={`Sort ${title}`} value={sort} onChange={onSortChange} />
+      </div>
+      <ul className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:flex">
+        <AnimatePresence initial={false} mode="popLayout">
+          {sortTimers(entries, sort).map(({ timer, remaining }) => (
+            <TimerCard
+              key={timer.id}
+              timer={timer}
+              remaining={remaining}
+              onPause={api.actions.pause}
+              onResume={api.actions.resume}
+              onRemove={api.actions.remove}
+              onRerun={api.actions.rerun}
+            />
+          ))}
+        </AnimatePresence>
+      </ul>
+    </section>
+  )
+}
+
+export default function App() {
+  const api = useTimers()
+  const { timers } = api
+
+  const [activeSort, setActiveSort] = useLocalStorage<SortKey>('dope-countdowns:sort-active', DEFAULT_SORT)
+  const [finishedSort, setFinishedSort] = useLocalStorage<SortKey>('dope-countdowns:sort-finished', DEFAULT_SORT)
+
+  const active = timers.filter((t) => t.timer.status !== 'finished')
   const running = timers.filter((t) => t.timer.status === 'running')
 
   useEffect(() => {
-    document.title =
-      running.length > 0
-        ? `${formatClock(Math.min(...running.map((t) => t.remaining)))} — ${BASE_TITLE}`
-        : BASE_TITLE
-  }, [running])
+    if (active.length === 0) {
+      document.title = BASE_TITLE
+      return
+    }
+    const soonest = active.reduce((a, b) => (a.remaining <= b.remaining ? a : b))
+    document.title = `${soonest.timer.title || 'Untitled'} · ${formatClock(soonest.remaining)}`
+  }, [active])
 
   useEffect(() => {
     if (running.length === 0) return
@@ -34,31 +101,32 @@ export default function App() {
     <div className="container min-h-dvh py-8">
       <header className="mb-8 flex items-center justify-between">
         <h1 className="text-2xl font-semibold xl:text-3xl">Dope Countdowns</h1>
-        <SettingsDialog settings={settings} onSettingsChange={setSettings} />
+        <SettingsDialog settings={api.settings} onSettingsChange={api.setSettings} />
       </header>
 
-      <main className="mx-auto flex max-w-4xl flex-col gap-6">
-        <NewTimerForm onStart={actions.start} />
+      <main className="mx-auto flex w-full max-w-full flex-col gap-8">
+        <NewTimerForm existingTitles={timers.map((t) => t.timer.title)} onStart={api.actions.start} />
 
-        {suggestions.length > 0 && (
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="text-xs uppercase tracking-wide text-muted-foreground">
-              Quick start
-            </span>
-            {suggestions.map((s) => (
-              <button
-                key={s.durationMs}
-                type="button"
-                onClick={() => actions.start(s.title, s.durationMs)}
-                className="inline-flex items-center gap-1.5 rounded-full border border-border bg-background-600 px-3 py-1 text-xs transition-colors hover:border-accent hover:text-accent"
-                aria-label={`Start ${s.title || formatClock(s.durationMs)} for ${formatClock(s.durationMs)}`}
-              >
-                <Plus className="size-3" aria-hidden />
-                {s.title ? `${s.title} · ` : ''}
-                {formatClock(s.durationMs)}
-              </button>
-            ))}
-          </div>
+        {api.favorites.length > 0 && (
+          <section className="flex flex-col gap-3" aria-label="Favourite timers">
+            <h2 className="text-lg font-semibold">
+              Favourite timers{' '}
+              <span className="text-sm font-normal text-muted-foreground">({api.favorites.length})</span>
+            </h2>
+            <div className="flex flex-wrap gap-2">
+              {api.favorites.map((f) => (
+                <button
+                  key={`${f.title}\u0000${f.durationMs}`}
+                  type="button"
+                  onClick={() => api.actions.start(f.title, f.durationMs, { favorite: true })}
+                  aria-label={`Start ${f.title || 'Untitled'} for ${formatClock(f.durationMs)}`}
+                  className="inline-flex items-center gap-1.5 rounded-full border border-border bg-background-600 px-3 py-1 text-xs transition-colors hover:border-accent hover:text-accent"
+                >
+                  {f.title || 'Untitled'} · {formatClock(f.durationMs)}
+                </button>
+              ))}
+            </div>
+          </section>
         )}
 
         {timers.length === 0 ? (
@@ -66,19 +134,22 @@ export default function App() {
             No timers yet. Type a duration like 5:00 and hit Start.
           </p>
         ) : (
-          <ul className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {timers.map(({ timer, remaining }) => (
-              <TimerCard
-                key={timer.id}
-                timer={timer}
-                remaining={remaining}
-                onPause={actions.pause}
-                onResume={actions.resume}
-                onRemove={actions.remove}
-                onDuplicate={actions.duplicate}
-              />
-            ))}
-          </ul>
+          <>
+            <TimerSection
+              title="Active timers"
+              entries={timers.filter((t) => t.timer.status !== 'finished')}
+              sort={activeSort}
+              onSortChange={setActiveSort}
+              api={api}
+            />
+            <TimerSection
+              title="Finished timers"
+              entries={timers.filter((t) => t.timer.status === 'finished')}
+              sort={finishedSort}
+              onSortChange={setFinishedSort}
+              api={api}
+            />
+          </>
         )}
       </main>
     </div>
