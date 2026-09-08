@@ -49,7 +49,7 @@ function TimerSection({
         </h2>
         <SortSelect label={`Sort ${title}`} value={sort} onChange={onSortChange} />
       </div>
-      <ul className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:flex">
+      <ul className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:flex lg:flex-wrap">
         <AnimatePresence initial={false} mode="popLayout">
           {sortTimers(entries, sort).map(({ timer, remaining }) => (
             <TimerCard
