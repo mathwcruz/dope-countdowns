@@ -83,6 +83,38 @@ test('blocks creating a second timer with the same title', async ({ page }) => {
   await expect(page.getByRole('button', { name: 'Start', exact: true })).toBeDisabled()
 })
 
+test('removing a favourite chip deletes it from favourites', async ({ page }) => {
+  await page.getByRole('button', { name: 'Mark as favourite' }).click()
+  await startTimer(page, 'Coffee', '500')
+  await page.getByRole('button', { name: 'Delete timer' }).click()
+
+  await page.getByRole('button', { name: 'Remove Coffee for 00:05:00 from favourites' }).click()
+  await expect(page.getByRole('button', { name: 'Start Coffee for 00:05:00' })).toHaveCount(0)
+  await expect(page.getByRole('heading', { name: /Favourite timers/ })).toBeHidden()
+})
+
+test('favourite chip timers are kept when finished', async ({ page }) => {
+  await page.getByRole('button', { name: 'Mark as favourite' }).click()
+  await startTimer(page, 'Tea', '2')
+  await page.getByRole('button', { name: 'Delete timer' }).click()
+
+  await page.getByRole('button', { name: 'Start Tea for 00:00:02' }).click()
+  const card = page.getByRole('listitem', { name: /Tea/ })
+  await expect(card.getByText("Time's up")).toBeVisible({ timeout: 10_000 })
+  await expect(page.getByRole('listitem')).toHaveCount(1)
+})
+
+test('blocks creating a timer with a favourite title', async ({ page }) => {
+  await page.getByRole('button', { name: 'Mark as favourite' }).click()
+  await startTimer(page, 'Coffee', '500')
+  await page.getByRole('button', { name: 'Delete timer' }).click()
+
+  await page.getByLabel('Timer title').fill('coffee')
+  await page.getByLabel('Duration').pressSequentially('2', { delay: 30 })
+  await expect(page.getByRole('alert')).toHaveText('A timer with this title already exists')
+  await expect(page.getByRole('button', { name: 'Start', exact: true })).toBeDisabled()
+})
+
 test('sound settings dialog opens and persists a choice', async ({ page }) => {
   await page.getByRole('button', { name: 'Sound settings' }).click()
   await page.getByRole('combobox').click()

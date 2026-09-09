@@ -6,6 +6,7 @@ import {
   duplicate,
   normalize,
   pause,
+  removeFavorite,
   remainingMs,
   resume,
   type FavoriteDef,
@@ -112,6 +113,7 @@ export function useTimers() {
         announced.current.delete(id)
         setTimers((prev) => prev?.filter((t) => t.id !== id))
       },
+      removeFavorite: (def: FavoriteDef) => setFavorites((prev) => removeFavorite(prev ?? [], def)),
       rerun: (id: string) => {
         const source = timers.find((t) => t.id === id)
         if (!source) return
@@ -123,7 +125,7 @@ export function useTimers() {
         ])
       },
     }),
-    [timers, update, setTimers],
+    [timers, update, setTimers, setFavorites],
   )
 
   return { timers: view, actions, favorites, settings, setSettings }

@@ -5,6 +5,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { useLocalStorage, useTimers, type TimersApi } from '@/hooks/useTimers'
 import { formatClock, sortTimers, DEFAULT_SORT, SORTS, type SortKey } from '@/lib/timers'
 import { AnimatePresence } from 'motion/react'
+import { X } from 'lucide-react'
 import { useEffect } from 'react'
 
 const BASE_TITLE = 'Dope Countdowns'
@@ -105,7 +106,10 @@ export default function App() {
       </header>
 
       <main className="mx-auto flex w-full max-w-full flex-col gap-8">
-        <NewTimerForm existingTitles={timers.map((t) => t.timer.title)} onStart={api.actions.start} />
+        <NewTimerForm
+          existingTitles={[...timers.map((t) => t.timer.title), ...api.favorites.map((f) => f.title)]}
+          onStart={api.actions.start}
+        />
 
         {api.favorites.length > 0 && (
           <section className="flex flex-col gap-3" aria-label="Favourite timers">
@@ -115,15 +119,27 @@ export default function App() {
             </h2>
             <div className="flex flex-wrap gap-2">
               {api.favorites.map((f) => (
-                <button
+                <span
                   key={`${f.title}\u0000${f.durationMs}`}
-                  type="button"
-                  onClick={() => api.actions.start(f.title, f.durationMs, { favorite: true })}
-                  aria-label={`Start ${f.title || 'Untitled'} for ${formatClock(f.durationMs)}`}
-                  className="inline-flex items-center gap-1.5 rounded-full border border-border bg-background-600 px-3 py-1 text-xs transition-colors hover:border-accent hover:text-accent"
+                  className="inline-flex items-stretch overflow-hidden rounded-full border border-border bg-background-600 text-xs transition-colors hover:border-accent hover:text-accent"
                 >
-                  {f.title || 'Untitled'} · {formatClock(f.durationMs)}
-                </button>
+                  <button
+                    type="button"
+                    onClick={() => api.actions.start(f.title, f.durationMs, { favorite: true, deleteWhenFinished: false })}
+                    aria-label={`Start ${f.title || 'Untitled'} for ${formatClock(f.durationMs)}`}
+                    className="px-3 py-1"
+                  >
+                    {f.title || 'Untitled'} · {formatClock(f.durationMs)}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => api.actions.removeFavorite(f)}
+                    aria-label={`Remove ${f.title || 'Untitled'} for ${formatClock(f.durationMs)} from favourites`}
+                    className="border-l border-border px-2 text-muted-foreground hover:text-destructive"
+                  >
+                    <X className="size-3" aria-hidden />
+                  </button>
+                </span>
               ))}
             </div>
           </section>

@@ -105,6 +105,14 @@ describe('useTimers', () => {
     ])
   })
 
+  it('removes only the matching favourite', async () => {
+    const { result } = renderHook(() => useTimers())
+    act(() => result.current.actions.start('Coffee', 300_000, { favorite: true }))
+    act(() => result.current.actions.start('Espresso', 600_000, { favorite: true }))
+    act(() => result.current.actions.removeFavorite({ title: 'Coffee', durationMs: 300_000 }))
+    expect(result.current.favorites).toEqual([{ title: 'Espresso', durationMs: 600_000 }])
+  })
+
   it('rejects duplicate titles regardless of case, allows repeated empty titles', async () => {
     const { result } = renderHook(() => useTimers())
     act(() => result.current.actions.start('Tea', 60_000))

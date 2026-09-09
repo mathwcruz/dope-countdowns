@@ -8,6 +8,7 @@ import {
   normalize,
   pause,
   sortTimers,
+  removeFavorite,
   remainingMs,
   resume,
 } from './timers'
@@ -125,5 +126,17 @@ describe('sortTimers', () => {
       entry(createTimer('C', 60_000, NOW)),
     ]
     expect(sortTimers(list, 'favorite').map((e) => e.timer.title)).toEqual(['B', 'A', 'C'])
+  })
+})
+
+describe('favourites', () => {
+  it('removes only the matching title+duration entry', () => {
+    const list = [
+      { title: 'Tea', durationMs: 60_000 },
+      { title: 'Tea', durationMs: 300_000 },
+      { title: ' Tea ', durationMs: 60_000 },
+    ]
+    const kept = removeFavorite(list, { title: 'Tea', durationMs: 60_000 })
+    expect(kept).toEqual([{ title: 'Tea', durationMs: 300_000 }])
   })
 })

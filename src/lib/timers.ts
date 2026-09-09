@@ -110,6 +110,11 @@ export function addFavorite(list: FavoriteDef[], def: FavoriteDef): FavoriteDef[
   return [def, ...list.filter((f) => key(f) !== key(def))]
 }
 
+export function removeFavorite(list: FavoriteDef[], def: FavoriteDef): FavoriteDef[] {
+  const key = (f: FavoriteDef) => `${f.title.trim()}\u0000${f.durationMs}`
+  return list.filter((f) => key(f) !== key(def))
+}
+
 export interface TimerEntry {
   timer: Timer
   remaining: number
