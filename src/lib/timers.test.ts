@@ -119,6 +119,17 @@ describe('sortTimers', () => {
     expect(sortTimers(list, 'duration-asc').map((e) => e.timer.title)).toEqual(['A', 'C', 'B'])
   })
 
+  it('duration sorts use live remaining, not original duration', () => {
+    const mk = (title: string, durationMs: number, remaining: number) => ({
+      timer: createTimer(title, durationMs, NOW),
+      remaining,
+    })
+    // 5:00 timer with 2:00 left vs untouched 3:30 timer
+    const list = [mk('five', 300_000, 120_000), mk('short', 210_000, 210_000)]
+    expect(sortTimers(list, 'duration-asc').map((e) => e.timer.title)).toEqual(['five', 'short'])
+    expect(sortTimers(list, 'duration-desc').map((e) => e.timer.title)).toEqual(['short', 'five'])
+  })
+
   it('sorts favourites first', () => {
     const list = [
       entry(createTimer('A', 60_000, NOW)),

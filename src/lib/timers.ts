@@ -140,11 +140,12 @@ export function sortTimers(entries: TimerEntry[], key: SortKey): TimerEntry[] {
         (a.timer.title || 'Untitled').localeCompare(b.timer.title || 'Untitled'),
       )
       break
+    // ponytail: sorts by live remaining (re-sorts on every tick), durationMs tiebreak keeps finished timers (remaining all 0) ordered
     case 'duration-desc':
-      list.sort((a, b) => b.timer.durationMs - a.timer.durationMs)
+      list.sort((a, b) => b.remaining - a.remaining || b.timer.durationMs - a.timer.durationMs)
       break
     case 'duration-asc':
-      list.sort((a, b) => a.timer.durationMs - b.timer.durationMs)
+      list.sort((a, b) => a.remaining - b.remaining || a.timer.durationMs - b.timer.durationMs)
       break
     case 'favorite':
       list.sort((a, b) => Number(b.timer.favorite ?? false) - Number(a.timer.favorite ?? false))
