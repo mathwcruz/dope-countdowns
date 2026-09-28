@@ -2,8 +2,8 @@ import { expect, test, type Page } from '@playwright/test'
 
 async function startTimer(page: Page, title: string, digits: string) {
   await page.getByLabel('Timer title').fill(title)
-  await page.getByLabel('Duration').click()
-  await page.getByLabel('Duration').pressSequentially(digits, { delay: 30 })
+  await page.getByLabel('Duration', { exact: true }).click()
+  await page.getByLabel('Duration', { exact: true }).pressSequentially(digits, { delay: 30 })
   await page.getByRole('button', { name: 'Start', exact: true }).click()
 }
 
@@ -102,6 +102,43 @@ test('favourite chip timers are kept when finished', async ({ page }) => {
   const card = page.getByRole('listitem', { name: /Tea/ })
   await expect(card.getByText("Time's up")).toBeVisible({ timeout: 10_000 })
   await expect(page.getByRole('listitem')).toHaveCount(1)
+})
+
+test('favourite chip replaces its finished timer with a fresh run', async ({ page }) => {
+  await page.getByRole('button', { name: 'Mark as favourite' }).click()
+  await startTimer(page, 'Tea', '2')
+  await page.getByRole('button', { name: 'Delete timer' }).click()
+
+  const chip = page.getByRole('button', { name: 'Start Tea for 00:00:02' })
+  await chip.click()
+  const card = page.getByRole('listitem', { name: /Tea/ })
+  await expect(card.getByText("Time's up")).toBeVisible({ timeout: 10_000 })
+
+  await chip.click()
+  await expect(page.getByRole('listitem')).toHaveCount(1)
+  await expect(card.getByRole('button', { name: 'Pause' })).toBeVisible()
+  await expect(card.getByText("Time's up")).toBeHidden()
+})
+
+test('duration sort orders active timers by time left, not original duration', async ({ page }) => {
+  await startTimer(page, 'Long', '10')
+  const long = page.getByRole('listitem', { name: /Long/ })
+  await expect(long.getByText(/00:00:0[12]/)).toBeVisible({ timeout: 12_000 })
+  await long.getByRole('button', { name: 'Pause' }).click()
+
+  await page.getByLabel('Sort Active timers').click()
+  await page.getByRole('option', { name: 'Duration (shortest first)' }).click()
+  await page.keyboard.press('Escape')
+
+  await startTimer(page, 'Short', '5')
+  await long.getByRole('button', { name: 'Resume' }).click()
+
+  const names = await page.getByRole('listitem').allInnerTexts()
+  const longIdx = names.findIndex((t) => t.includes('Long'))
+  const shortIdx = names.findIndex((t) => t.includes('Short'))
+  expect(longIdx).toBeGreaterThanOrEqual(0)
+  expect(shortIdx).toBeGreaterThanOrEqual(0)
+  expect(longIdx).toBeLessThan(shortIdx)
 })
 
 test('blocks creating a timer with a favourite title', async ({ page }) => {

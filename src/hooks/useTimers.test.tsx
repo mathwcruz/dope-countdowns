@@ -113,6 +113,29 @@ describe('useTimers', () => {
     expect(result.current.favorites).toEqual([{ title: 'Espresso', durationMs: 600_000 }])
   })
 
+  it('replaces a finished duplicate when starting the same favourite again', async () => {
+    const { result } = renderHook(() => useTimers())
+    act(() => result.current.actions.start('Tea', 60_000, { favorite: true, deleteWhenFinished: false }))
+    const id = result.current.timers[0].timer.id
+    act(() => vi.advanceTimersByTime(61_000))
+    expect(result.current.timers[0].timer.status).toBe('finished')
+
+    act(() => result.current.actions.start('Tea', 60_000, { favorite: true, deleteWhenFinished: false }))
+    expect(result.current.timers).toHaveLength(1)
+    expect(result.current.timers[0].timer.id).not.toBe(id)
+    expect(result.current.timers[0].timer.status).toBe('running')
+    expect(result.current.timers[0].remaining).toBe(60_000)
+  })
+
+  it('keeps a finished same-title timer with a different duration', async () => {
+    const { result } = renderHook(() => useTimers())
+    act(() => result.current.actions.start('Tea', 60_000, { favorite: true, deleteWhenFinished: false }))
+    act(() => vi.advanceTimersByTime(61_000))
+    act(() => result.current.actions.start('Tea', 90_000))
+    expect(result.current.timers).toHaveLength(2)
+    expect(result.current.timers.filter((t) => t.timer.status === 'running')).toHaveLength(1)
+  })
+
   it('rejects duplicate titles regardless of case, allows repeated empty titles', async () => {
     const { result } = renderHook(() => useTimers())
     act(() => result.current.actions.start('Tea', 60_000))

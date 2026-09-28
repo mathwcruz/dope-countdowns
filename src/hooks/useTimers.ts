@@ -102,9 +102,16 @@ export function useTimers() {
     () => ({
       start: (title: string, durationMs: number, opts?: TimerOptions) => {
         if (durationMs <= 0) return
+        const now = Date.now()
         const name = title.trim().toLowerCase()
-        if (name && timers.some((t) => t.title.trim().toLowerCase() === name)) return
-        setTimers((prev) => [...(prev ?? []), createTimer(title, durationMs, Date.now(), opts)])
+        const sameTitle = (t: Timer) => name !== '' && t.title.trim().toLowerCase() === name
+        if (timers.some((t) => sameTitle(t) && remainingMs(t, now) > 0)) return
+        setTimers((prev) => [
+          ...(prev ?? []).filter(
+            (t) => !(sameTitle(t) && t.durationMs === durationMs && remainingMs(t, now) <= 0),
+          ),
+          createTimer(title, durationMs, now, opts),
+        ])
         if (opts?.favorite) setFavorites((prev) => addFavorite(prev ?? [], { title: title.trim(), durationMs }))
       },
       pause: (id: string) => update(id, (t) => pause(t, Date.now())),
